@@ -99,7 +99,7 @@ const addImageFromFile = (file, asBackground = false) => {
           scaleX: scale,
           scaleY: scale,
           left: 0, 
-          top: 0,
+          top: 1,
           selectable: false,
           evented: false,
           originX: 'left', // Importante resetar origem p/ background
