@@ -157,12 +157,21 @@ const addImageFromFile = (file, asBackground = false) => {
         if (obj.isGridLine) canvas.remove(obj);
       });
 
-      const w = canvas.width;
-      const h = canvas.height;
+      // Fixed grid: 100x100 squares (7000x7000 pixels with GRID_SIZE=70)
+      const gridSquares = 100;
+      const gridPixels = gridSquares * GRID_SIZE;
 
-      for (let x = 0; x <= w; x += GRID_SIZE) {
+      // Center grid on (0,0): from -50 to +50 grid squares
+      const startGrid = -gridSquares / 2;
+      const endGrid = gridSquares / 2;
+      const startPixel = startGrid * GRID_SIZE;
+      const endPixel = endGrid * GRID_SIZE;
+
+      // Vertical lines
+      for (let gridX = startGrid; gridX <= endGrid; gridX++) {
+        const x = gridX * GRID_SIZE;
         canvas.add(
-          new Line([x, 0, x, h], {
+          new Line([x, startPixel, x, endPixel], {
             stroke: GRID_COLOR,
             selectable: false,
             evented: false,
@@ -170,9 +179,12 @@ const addImageFromFile = (file, asBackground = false) => {
           })
         );
       }
-      for (let y = 0; y <= h; y += GRID_SIZE) {
+
+      // Horizontal lines
+      for (let gridY = startGrid; gridY <= endGrid; gridY++) {
+        const y = gridY * GRID_SIZE;
         canvas.add(
-          new Line([0, y, w, y], {
+          new Line([startPixel, y, endPixel, y], {
             stroke: GRID_COLOR,
             selectable: false,
             evented: false,
@@ -180,9 +192,14 @@ const addImageFromFile = (file, asBackground = false) => {
           })
         );
       }
+
+      // Center viewport on (0,0)
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      canvas.viewportTransform = [1, 0, 0, 1, centerX, centerY];
+
       canvas.renderAll();
     };
-
     resizeAndDraw();
     window.addEventListener('resize', resizeAndDraw);
 canvas.on('object:modified', (e) => {
