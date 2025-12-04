@@ -1,11 +1,11 @@
 
 import './App.css';
-import io from 'socket.io-client'
 import {useEffect,useState} from "react"
-import RPGGrid from './components/GRID/RPGGrid';
+import GridController from './components/GRID/GridController';
+import io from 'socket.io-client'
 
 
-const socket = io.connect("http://localhost:3001")
+const socket = io.connect("http://10.10.10.12:3001")
 function App() {
   const [message,setMessage] = useState("")
   const [MessageReceived,setMessageReceived] = useState("")
@@ -29,7 +29,7 @@ function App() {
   return (
     <div className="App">
       
-      <RPGGrid></RPGGrid>
+      <GridController></GridController>
  
       <input type='text' onChange={(event)=>{setMessage(event.target.value)}} placeholder='message'></input>
       <button onClick={senMessage}>Send message</button>
