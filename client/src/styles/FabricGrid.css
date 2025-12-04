@@ -1,0 +1,97 @@
+/* components/FabricGrid.css */
+.fabric-grid-container {
+  display: flex;
+  height: 100vh;
+  background: #0f172a;
+  color: white;
+}
+
+.grid-toolbar {
+  width: 250px;
+  padding: 20px;
+  background: #1e293b;
+  border-right: 2px solid #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.toolbar-btn {
+  padding: 10px 15px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: #2563eb;
+}
+
+.toolbar-btn.clear {
+  background: #ef4444;
+}
+
+.toolbar-btn.clear:hover {
+  background: #dc2626;
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #1e293b;
+}
+
+.canvas-container canvas {
+  border: 2px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.tokens-list {
+  margin-top: 20px;
+  padding: 15px;
+  background: #334155;
+  border-radius: 5px;
+}
+
+.token-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  margin: 5px 0;
+  background: #475569;
+  border-radius: 3px;
+}
+
+.remove-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-instructions {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 15px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.canvas-instructions p {
+  margin: 5px 0;
+}
