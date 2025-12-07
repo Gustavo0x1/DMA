@@ -25,7 +25,25 @@ io.on("connection",(socket)=>{
         socket.broadcast.emit("receive_message",data)
     })
 
+    socket.on("TokenMoved", (ID,PosX,PosY) => {
+        console.log(`Token moved by ${socket.id}:`, ID);
+        socket.broadcast.emit("TokenMoved", ID, PosX, PosY);
+    });
+
 })
 server.listen(3001,()=>{
     console.log("Server is running")
 })
+
+
+/*
+let fds = -5;
+
+
+setInterval(() => {
+    console.log("?");
+    fds +=1
+    io.emit("move_token_by_id", 4, fds,fds);
+}, 1000); // 1000 milliseconds = 1 second
+
+*/

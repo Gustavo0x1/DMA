@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import RPGGrid from './RPGGrid';
 import io from 'socket.io-client'
-const socket = io.connect("http://10.10.10.12:3001")
+const socket = io.connect("https://enrollment-generic-math-alert.trycloudflare.com")
 
 
 function GridController() {
@@ -25,13 +25,15 @@ function GridController() {
 
 
     var gpos = 0;
-    // 2. This function runs when the user drags a token inside the Grid
+
     const handleGridTokenMove = (data) => {
         console.log("Parent received move:", data);
         socket.emit("TokenMoved", data.id, data.x, data.y);    
     };
 
     const forceMoveGoblin = (ID,PosX,PosY) => {
+        console.log(ID+" 3 33 "+PosX+"  33 3 3 " +PosX)
+
         if (gridRef.current) {
             gpos += 1
             gridRef.current.moveToken(ID, PosX, PosY);
@@ -46,6 +48,9 @@ function GridController() {
     useEffect(() => {
     
         spawnGoblin();
+
+
+        
         }, []);
 
 
@@ -56,7 +61,8 @@ function GridController() {
             <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 1000, background: 'white', padding: 10 }}>
                 <h3>Parent Controls</h3>
                 <button onClick={spawnGoblin}>Spawn Goblin (ID 4)</button>
-                <button onClick={forceMoveGoblin}>Move Goblin to (5,5)</button>
+
+<button onClick={() => forceMoveGoblin(4, 5, 5)}>Move Goblin to (5,5)</button>
             </div>
 
             {/* Pass the ref and the handler */}

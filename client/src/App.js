@@ -5,7 +5,7 @@ import GridController from './components/GRID/GridController';
 import io from 'socket.io-client'
 
 
-const socket = io.connect("http://10.10.10.12:3001")
+const socket = io.connect("https://enrollment-generic-math-alert.trycloudflare.com")
 function App() {
   const [message,setMessage] = useState("")
   const [MessageReceived,setMessageReceived] = useState("")

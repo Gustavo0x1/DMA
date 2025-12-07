@@ -3,8 +3,10 @@ import { Canvas, FabricImage, Line, Point } from 'fabric';
 
 const GRID_SIZE = 70;
 const GRID_COLOR = '#444444';
+const API_URL = 'http://localhost:4000';
+const USER_ID = 'gm'; 
 
-// REACT 19 CHANGE: No forwardRef wrapper. 'ref' is now just a prop.
+
 function RPGGrid({ onTokenMove, ref }) {
   const canvasRef = useRef(null);
   const canvasInstance = useRef(null);
@@ -17,13 +19,18 @@ function RPGGrid({ onTokenMove, ref }) {
 
   // Expose functions to the parent via the ref prop
 useImperativeHandle(ref, () => ({
+  
     moveToken: (ID, gridX, gridY) => {
+      console.log(gridX)
       const canvas = canvasInstance.current;
+
       if (!canvas) return;
 
       const tokenEncontrado = canvas.getObjects().find((obj) => obj.id === ID);
 
+      
       if (tokenEncontrado) {
+       
         const newX = gridX * GRID_SIZE + GRID_SIZE / 2;
         const newY = gridY * GRID_SIZE + GRID_SIZE / 2;  
         tokenEncontrado.set({
@@ -31,7 +38,7 @@ useImperativeHandle(ref, () => ({
           top: newY,
         });
 
-        // UPDATE 1: Update saved coordinates when moved programmatically
+
         tokenEncontrado.savedGridX = gridX;
         tokenEncontrado.savedGridY = gridY;
 
@@ -81,63 +88,46 @@ useImperativeHandle(ref, () => ({
     }
   };
 
-  const addImageFromFile = (file, asBackground = false) => {
-    if (!file || !canvasInstance.current) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target.result;
-      try {
-        const fabricImg = await FabricImage.fromURL(dataUrl);
-        const canvas = canvasInstance.current;
-        if (asBackground) {
-          //BACKGROUND
-          const scale = Math.max(canvas.width / fabricImg.width, canvas.height / fabricImg.height);
-          fabricImg.set({
-            scaleX: scale,
-            scaleY: scale,
-            left: 0,
-            top: 0,
-            selectable: false,
-            evented: false,
-            originX: 'left',
-            originY: 'top',
-          });
-          canvas.backgroundImage = fabricImg;
-          canvas.renderAll();
-        } else {
-          //TOKEN
-          const gridSize = GRID_SIZE;
-          const scale = (gridSize / Math.max(fabricImg.width, fabricImg.height)) * 0.9;
-          const startGridX = 1;
-          const startGridY = 1;
-          const newX = startGridX * GRID_SIZE + GRID_SIZE / 2;  
-          const newY = startGridY * GRID_SIZE + GRID_SIZE / 2;
-          fabricImg.set({
-            left: newX,
-            top: newY,
-            scaleX: scale,
-            scaleY: scale,
-            originX: 'center',
-            originY: 'center',
-            cornerStyle: 'circle',
-            cornerColor: '#00ff88',
-            transparentCorners: false,
-            id: 'temp-' + Date.now()
-          });
-          fabricImg.savedGridX = startGridX;
-          fabricImg.savedGridY = startGridY;
+const addImageFromFile = async (file, asBackground = false) => {
+  if (!file || !canvasInstance.current) return;
 
-          canvas.add(fabricImg);
-          canvas.setActiveObject(fabricImg);
-          canvas.renderAll();
-        }
-      } catch (err) {
-        console.error('Erro ao processar imagem:', err);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
+  const formData = new FormData();
+  formData.append('file', file);
 
+  try {
+    const response = await fetch(`${API_URL}/api/upload`, {
+      method: 'POST',
+      headers: { 'x-user-id': USER_ID },
+      body: formData
+    });
+
+    if (!response.ok) throw new Error('Upload failed');
+
+    const data = await response.json();
+    const serverUrl = data.url; // ← Esta é a URL permanente do seu servidor!
+
+    // 2. Agora usa a URL do servidor para criar o token/fundo
+    if (asBackground) {
+      const fabricImg = await FabricImage.fromURL(serverUrl);
+      const canvas = canvasInstance.current;
+      const scale = Math.max(canvas.width / fabricImg.width, canvas.height / fabricImg.height);
+      fabricImg.set({
+        scaleX: scale, scaleY: scale,
+        left: 0, top: 0,
+        selectable: false, evented: false,
+        originX: 'left', originY: 'top',
+      });
+      canvas.backgroundImage = fabricImg;
+      canvas.renderAll();
+    } else {
+      // Token normal
+      await createTokenAt(serverUrl, 1, 1, 'token-' + Date.now());
+    }
+  } catch (err) {
+    console.error('Erro no upload ou criação do token:', err);
+    alert('Falha ao enviar imagem para o servidor');
+  }
+};
   useEffect(() => {
     if (!canvasRef.current) return;
 
