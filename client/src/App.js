@@ -3,9 +3,9 @@ import './App.css';
 import {useEffect,useState} from "react"
 import GridController from './components/GRID/GridController';
 import io from 'socket.io-client'
+const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com"
 
-
-const socket = io.connect("https://enrollment-generic-math-alert.trycloudflare.com")
+const socket = io.connect(API_URL)
 function App() {
   const [message,setMessage] = useState("")
   const [MessageReceived,setMessageReceived] = useState("")

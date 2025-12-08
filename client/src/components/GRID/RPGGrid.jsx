@@ -3,11 +3,10 @@ import { Canvas, FabricImage, Line, Point } from 'fabric';
 
 const GRID_SIZE = 70;
 const GRID_COLOR = '#444444';
-const API_URL = 'http://localhost:4000';
+const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com";
 const USER_ID = 'gm'; 
 
-
-function RPGGrid({ onTokenMove, ref }) {
+function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
   const canvasRef = useRef(null);
   const canvasInstance = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -18,26 +17,48 @@ function RPGGrid({ onTokenMove, ref }) {
   }, [onTokenMove]);
 
   // Expose functions to the parent via the ref prop
-useImperativeHandle(ref, () => ({
-  
+  useImperativeHandle(ref, () => ({
+    getAllTokens: () => {
+      const canvas = canvasInstance.current;
+      if (!canvas) return [];
+      
+      return canvas.getObjects()
+        .filter(obj => obj.id && obj !== canvas.backgroundImage)
+        .map(obj => ({
+          id: obj.id,
+          imageId: obj.imageId,
+          gridX: obj.savedGridX || 0,
+          gridY: obj.savedGridY || 0
+        }));
+    },
+    
+    clearAllTokens: () => {
+      const canvas = canvasInstance.current;
+      if (!canvas) return;
+      
+      const objectsToRemove = canvas.getObjects()
+        .filter(obj => obj.id && obj !== canvas.backgroundImage);
+      
+      objectsToRemove.forEach(obj => canvas.remove(obj));
+      canvas.renderAll();
+      console.log('Todos os tokens foram removidos');
+    },
+    
     moveToken: (ID, gridX, gridY) => {
-      console.log(gridX)
+      console.log(gridX);
       const canvas = canvasInstance.current;
 
       if (!canvas) return;
 
       const tokenEncontrado = canvas.getObjects().find((obj) => obj.id === ID);
 
-      
       if (tokenEncontrado) {
-       
         const newX = gridX * GRID_SIZE + GRID_SIZE / 2;
         const newY = gridY * GRID_SIZE + GRID_SIZE / 2;  
         tokenEncontrado.set({
-          left: newX ,
+          left: newX,
           top: newY,
         });
-
 
         tokenEncontrado.savedGridX = gridX;
         tokenEncontrado.savedGridY = gridY;
@@ -49,12 +70,13 @@ useImperativeHandle(ref, () => ({
         console.warn(`Token with ID ${ID} not found.`);
       }
     },
-    createToken: (fileOrDataUrl, gridX, gridY, ID) => {
-      createTokenAt(fileOrDataUrl, gridX, gridY, ID);
+    
+    createToken: (fileOrDataUrl, gridX, gridY, ID, imageId = null) => {
+      createTokenAt(fileOrDataUrl, gridX, gridY, ID, imageId);
     }
   }));
 
-  const createTokenAt = async (fileOrDataUrl, gridX, gridY, ID) => {
+  const createTokenAt = async (fileOrDataUrl, gridX, gridY, ID, imageId = null) => {
     const canvas = canvasInstance.current;
     if (!canvas) return;
 
@@ -62,15 +84,18 @@ useImperativeHandle(ref, () => ({
       const fabricImg = await FabricImage.fromURL(fileOrDataUrl);
       const currentZoom = canvas.getZoom();
 
-      const pixelX = gridX * GRID_SIZE   + GRID_SIZE/2
-      const pixelY = gridY * GRID_SIZE  + GRID_SIZE/2
+      const pixelX = gridX * GRID_SIZE + GRID_SIZE/2;
+      const pixelY = gridY * GRID_SIZE + GRID_SIZE/2;
 
       const scale = ((GRID_SIZE) / Math.max(fabricImg.width, fabricImg.height)) * 0.9;
 
       fabricImg.set({
-        left: 1+35,
-        top: 1+35,
+        left: pixelX,
+        top: pixelY,
         id: ID,
+        imageId: imageId, // IMPORTANTE: Armazena o image_id
+        savedGridX: gridX, // Salva posição inicial
+        savedGridY: gridY, // Salva posição inicial
         scaleX: scale,
         scaleY: scale,
         originX: 'center',
@@ -83,51 +108,61 @@ useImperativeHandle(ref, () => ({
 
       canvas.add(fabricImg);
       canvas.renderAll();
+      console.log(`Token criado: ${ID} em (${gridX}, ${gridY}) com imageId: ${imageId}`);
     } catch (err) {
       console.error('Erro ao criar token:', err);
     }
   };
 
-const addImageFromFile = async (file, asBackground = false) => {
-  if (!file || !canvasInstance.current) return;
+  const addImageFromFile = async (file, asBackground = false) => {
+    if (!file || !canvasInstance.current) return;
 
-  const formData = new FormData();
-  formData.append('file', file);
+    const formData = new FormData();
+    formData.append('file', file);
 
-  try {
-    const response = await fetch(`${API_URL}/api/upload`, {
-      method: 'POST',
-      headers: { 'x-user-id': USER_ID },
-      body: formData
-    });
-
-    if (!response.ok) throw new Error('Upload failed');
-
-    const data = await response.json();
-    const serverUrl = data.url; // ← Esta é a URL permanente do seu servidor!
-
-    // 2. Agora usa a URL do servidor para criar o token/fundo
-    if (asBackground) {
-      const fabricImg = await FabricImage.fromURL(serverUrl);
-      const canvas = canvasInstance.current;
-      const scale = Math.max(canvas.width / fabricImg.width, canvas.height / fabricImg.height);
-      fabricImg.set({
-        scaleX: scale, scaleY: scale,
-        left: 0, top: 0,
-        selectable: false, evented: false,
-        originX: 'left', originY: 'top',
+    try {
+      const response = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        headers: { 'x-user-id': USER_ID },
+        body: formData
       });
-      canvas.backgroundImage = fabricImg;
-      canvas.renderAll();
-    } else {
-      // Token normal
-      await createTokenAt(serverUrl, 1, 1, 'token-' + Date.now());
+
+      if (!response.ok) throw new Error('Upload failed');
+
+      const data = await response.json();
+      const serverUrl = data.url; // URL permanente do servidor
+      
+      if (onTokenCreated) {
+        onTokenCreated({
+          id: data.token_id,     // ID único do token na mesa
+          imageId: data.image_id, // ID da imagem no banco (para os outros baixarem)
+          x: 1,
+          y: 1
+        });
+      }
+ 
+      if (asBackground) {
+        const fabricImg = await FabricImage.fromURL(serverUrl);
+        const canvas = canvasInstance.current;
+        const scale = Math.max(canvas.width / fabricImg.width, canvas.height / fabricImg.height);
+        fabricImg.set({
+          scaleX: scale, scaleY: scale,
+          left: 0, top: 0,
+          selectable: false, evented: false,
+          originX: 'left', originY: 'top',
+        });
+        canvas.backgroundImage = fabricImg;
+        canvas.renderAll();
+      } else {
+        // Token normal - agora passa o imageId também
+        await createTokenAt(serverUrl, 1, 1, 'token-' + Date.now(), data.image_id);
+      }
+    } catch (err) {
+      console.error('Erro no upload ou criação do token:', err);
+      alert('Falha ao enviar imagem para o servidor');
     }
-  } catch (err) {
-    console.error('Erro no upload ou criação do token:', err);
-    alert('Falha ao enviar imagem para o servidor');
-  }
-};
+  };
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -188,7 +223,7 @@ const addImageFromFile = async (file, asBackground = false) => {
     resizeAndDraw();
     window.addEventListener('resize', resizeAndDraw);
 
-canvas.on('object:modified', (e) => {
+    canvas.on('object:modified', (e) => {
       const obj = e.target;
       if (!obj || obj === canvas.backgroundImage) return;
 
@@ -203,13 +238,11 @@ canvas.on('object:modified', (e) => {
       const gridX = Math.floor((newLeft - halfGrid) / gridSize);
       const gridY = Math.floor((newTop - halfGrid) / gridSize);
 
-      // UPDATE 4: Check if coordinates actually changed
-      // We compare current gridX/Y with the stored savedGridX/Y
+      // Check if coordinates actually changed
       if (obj.savedGridX !== gridX || obj.savedGridY !== gridY) {
+        console.log(`🔄 Token [${obj.id}] CHANGED to: [${gridX}, ${gridY}]`);
         
-        console.log(`📍 Token [${obj.id}] CHANGED to: [${gridX}, ${gridY}]`);
-        
-        // Update the stored coordinates so we don't fire again for the same spot
+        // Update the stored coordinates
         obj.savedGridX = gridX;
         obj.savedGridY = gridY;
 
@@ -217,7 +250,7 @@ canvas.on('object:modified', (e) => {
           onTokenMoveRef.current({ id: obj.id, x: gridX, y: gridY });
         }
       } else {
-        console.log(`📍 Token [${obj.id}] snapped back to same cell. Ignoring.`);
+        console.log(`🔄 Token [${obj.id}] snapped back to same cell. Ignoring.`);
       }
     });
 
