@@ -3,7 +3,8 @@ import './App.css';
 import {useEffect,useState} from "react"
 import GridController from './components/GRID/GridController';
 import io from 'socket.io-client'
-const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com"
+import './VTT.css';
+const API_URL = process.env.REACT_APP_API_URL;
 
 const socket = io.connect(API_URL)
 function App() {

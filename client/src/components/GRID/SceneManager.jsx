@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import io from 'socket.io-client';
-
-const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com";
+const API_URL = process.env.REACT_APP_API_URL;
 
 function SceneManager({ gridRef, socket }) {
     const [cenas, setCenas] = useState([]);
@@ -10,14 +8,12 @@ function SceneManager({ gridRef, socket }) {
     const [nomeCena, setNomeCena] = useState('');
     const [descricaoCena, setDescricaoCena] = useState('');
 
-    // Carrega lista de cenas ao montar
     useEffect(() => {
         loadCenasList();
 
-        // NOVO: Escuta quando uma cena é ativada pelo servidor
         if (socket) {
             socket.on("LoadActiveScene", (cena) => {
-                console.log('📥 Recebendo cena ativa do servidor:', cena.nome);
+                console.log('🔥 Recebendo cena ativa do servidor:', cena.nome);
                 loadSceneLocally(cena);
             });
 
@@ -38,7 +34,7 @@ function SceneManager({ gridRef, socket }) {
         }
     };
 
-    // SALVAR CENA ATUAL
+    // SALVAR CENA ATUAL (agora com suporte a tokens temporários)
     const saveCurrentScene = async () => {
         if (!nomeCena.trim()) {
             alert('Digite um nome para a cena!');
@@ -51,13 +47,16 @@ function SceneManager({ gridRef, socket }) {
         }
 
         try {
-            // 1. Pega todos os tokens do canvas
-            const tokens = gridRef.current.getAllTokens();
+            // 1. Pega todos os tokens do canvas (incluindo temporários)
+            const allTokens = gridRef.current.getAllTokens();
             
-            if (tokens.length === 0) {
+            if (allTokens.length === 0) {
                 alert('Não há tokens para salvar!');
                 return;
             }
+
+            console.log(`Salvando cena com ${allTokens.length} tokens...`);
+            console.log('Tokens:', allTokens);
 
             // 2. Cria a cena no banco
             const cenaResponse = await fetch(`${API_URL}/api/cenas`, {
@@ -72,16 +71,30 @@ function SceneManager({ gridRef, socket }) {
             const cenaData = await cenaResponse.json();
             const cenaId = cenaData.cena_id;
 
-            console.log(`Cena criada: ${cenaId}`);
+            console.log(` Cena criada: ${cenaId}`);
 
-            // 3. Para cada token, salva no banco e associa à cena
-            for (const token of tokens) {
-                // Salva/atualiza o token
+            // 3. Para cada token, processa baseado se é temporário ou não
+            let tempCount = 0;
+            let persistedCount = 0;
+
+            for (const token of allTokens) {
+                let finalTokenId = token.id;
+
+                // Se for temporário, gera um ID permanente
+                if (token.isTemporary) {
+                    finalTokenId = `token-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    tempCount++;
+                    console.log(`⚠️ Token temporário ${token.id} → permanente ${finalTokenId}`);
+                } else {
+                    persistedCount++;
+                }
+
+                // Salva/atualiza o token no banco
                 await fetch(`${API_URL}/api/tokens`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        token_id: token.id,
+                        token_id: finalTokenId,
                         image_id: token.imageId,
                         pos_x: token.gridX,
                         pos_y: token.gridY
@@ -92,11 +105,17 @@ function SceneManager({ gridRef, socket }) {
                 await fetch(`${API_URL}/api/cenas/${cenaId}/tokens`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token_id: token.id })
+                    body: JSON.stringify({ token_id: finalTokenId })
                 });
             }
 
-            alert(`Cena "${nomeCena}" salva com sucesso! (${tokens.length} tokens)`);
+            alert(
+                ` Cena "${nomeCena}" salva com sucesso!\n\n` +
+                ` Total: ${allTokens.length} tokens\n` +
+                ` Temporários salvos: ${tempCount}\n` +
+                ` Já persistentes: ${persistedCount}`
+            );
+            
             setShowSaveModal(false);
             setNomeCena('');
             setDescricaoCena('');
@@ -111,18 +130,16 @@ function SceneManager({ gridRef, socket }) {
     // CARREGAR CENA
     const loadScene = async (cenaId) => {
         try {
-            // 1. Busca a cena completa
             const response = await fetch(`${API_URL}/api/cenas/${cenaId}`);
             const cena = await response.json();
 
             console.log('Carregando cena:', cena);
 
-            // 2. Ativa a cena no servidor (isso vai notificar TODOS os clientes via Socket.IO)
+            // Ativa a cena no servidor
             if (socket) {
                 socket.emit("ActivateScene", cenaId);
             }
 
-            // 3. Carrega localmente também
             loadSceneLocally(cena);
 
             alert(`Cena "${cena.nome}" carregada e ativada para todos os jogadores!`);
@@ -144,7 +161,7 @@ function SceneManager({ gridRef, socket }) {
         // Limpa o canvas atual
         gridRef.current.clearAllTokens();
 
-        // Cria cada token no canvas
+        // Cria cada token no canvas (AGORA COMO PERSISTENTE)
         for (const token of cena.tokens) {
             const imageUrl = `${API_URL}/api/image/${token.image_id}`;
             gridRef.current.createToken(
@@ -152,11 +169,12 @@ function SceneManager({ gridRef, socket }) {
                 token.pos_x,
                 token.pos_y,
                 token.token_id,
-                token.image_id
+                token.image_id,
+                false // NÃO é temporário - foi carregado do banco
             );
         }
 
-        console.log(`✅ Cena "${cena.nome}" carregada localmente (${cena.tokens.length} tokens)`);
+        console.log(` Cena "${cena.nome}" carregada localmente (${cena.tokens.length} tokens)`);
     };
 
     // DELETAR CENA
@@ -175,136 +193,57 @@ function SceneManager({ gridRef, socket }) {
     };
 
     return (
-        <div style={{ 
-            position: 'fixed', 
-            top: 10, 
-            left: 10, 
-            zIndex: 1000, 
-            background: 'rgba(0,0,0,0.9)', 
-            padding: 15,
-            borderRadius: 8,
-            border: '2px solid #00ff88',
-            color: 'white',
-            fontFamily: 'Arial'
-        }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#00ff88' }}>🎬 Cenas</h3>
+<div className="scene-manager">
+            <h3 >Cenas</h3>
             
-            <button 
-                onClick={() => setShowSaveModal(true)}
-                style={{
-                    padding: '8px 16px',
-                    background: '#00ff88',
-                    color: 'black',
-                    border: 'none',
-                    borderRadius: 5,
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    marginRight: 10
-                }}
-            >
-                💾 Salvar Cena
-            </button>
+<button className="scene-btn" onClick={() => setShowSaveModal(true)}>
+  Salvar Cena
+</button>
 
-            <button 
-                onClick={() => setShowLoadModal(true)}
-                style={{
-                    padding: '8px 16px',
-                    background: '#4488ff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 5,
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}
-            >
-                📂 Carregar Cena
-            </button>
+<button className="scene-btn load" onClick={() => setShowLoadModal(true)}>
+  Carregar Cena
+</button>
 
             {/* MODAL DE SALVAR */}
             {showSaveModal && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.8)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 2000
-                }}>
-                    <div style={{
-                        background: '#222',
-                        padding: 30,
-                        borderRadius: 10,
-                        border: '2px solid #00ff88',
-                        minWidth: 400
-                    }}>
-                        <h2 style={{ color: '#00ff88', marginTop: 0 }}>💾 Salvar Cena Atual</h2>
+  <div className="modal-overlay">
+ <div className="modal-content">
+                        <h2 >Salvar Cena Atual</h2>
                         
-                        <label style={{ display: 'block', marginBottom: 10 }}>
+                        <div>
+                            ⚠️ <strong>Atenção:</strong> Tokens temporários (borda laranja) serão salvos permanentemente!
+                        </div>
+                        
+                        <label>
                             <strong>Nome da Cena:</strong>
                             <input
                                 type="text"
                                 value={nomeCena}
                                 onChange={(e) => setNomeCena(e.target.value)}
                                 placeholder="Ex: Taverna do Dragão"
-                                style={{
-                                    width: '100%',
-                                    padding: 10,
-                                    marginTop: 5,
-                                    background: '#333',
-                                    color: 'white',
-                                    border: '1px solid #555',
-                                    borderRadius: 5
-                                }}
                             />
                         </label>
 
-                        <label style={{ display: 'block', marginBottom: 20 }}>
+                          <label>
                             <strong>Descrição (opcional):</strong>
                             <textarea
                                 value={descricaoCena}
                                 onChange={(e) => setDescricaoCena(e.target.value)}
                                 placeholder="Descreva a cena..."
                                 rows={3}
-                                style={{
-                                    width: '100%',
-                                    padding: 10,
-                                    marginTop: 5,
-                                    background: '#333',
-                                    color: 'white',
-                                    border: '1px solid #555',
-                                    borderRadius: 5,
-                                    resize: 'vertical'
-                                }}
+
                             />
                         </label>
 
                         <div style={{ display: 'flex', gap: 10 }}>
-                            <button onClick={saveCurrentScene} style={{
-                                flex: 1,
-                                padding: 12,
-                                background: '#00ff88',
-                                color: 'black',
-                                border: 'none',
-                                borderRadius: 5,
-                                cursor: 'pointer',
-                                fontWeight: 'bold'
-                            }}>
+                            <button onClick={saveCurrentScene}>
                                 Salvar
                             </button>
                             <button onClick={() => {
                                 setShowSaveModal(false);
                                 setNomeCena('');
                                 setDescricaoCena('');
-                            }} style={{
-                                flex: 1,
-                                padding: 12,
-                                background: '#555',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: 5,
-                                cursor: 'pointer'
-                            }}>
+                            }} >
                                 Cancelar
                             </button>
                         </div>
@@ -332,7 +271,7 @@ function SceneManager({ gridRef, socket }) {
                         maxHeight: '80vh',
                         overflow: 'auto'
                     }}>
-                        <h2 style={{ color: '#4488ff', marginTop: 0 }}>📂 Carregar Cena</h2>
+                        <h2 style={{ color: '#4488ff', marginTop: 0 }}>Carregar Cena</h2>
                         
                         {cenas.length === 0 ? (
                             <p style={{ color: '#999' }}>Nenhuma cena salva ainda.</p>

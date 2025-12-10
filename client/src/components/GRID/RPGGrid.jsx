@@ -3,7 +3,7 @@ import { Canvas, FabricImage, Line, Point } from 'fabric';
 
 const GRID_SIZE = 70;
 const GRID_COLOR = '#444444';
-const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com";
+const API_URL = process.env.REACT_APP_API_URL;
 const USER_ID = 'gm'; 
 
 function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
@@ -11,7 +11,19 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
   const canvasInstance = useRef(null);
   const [zoom, setZoom] = useState(1);
   const onTokenMoveRef = useRef(onTokenMove);
-
+  let isDragging = false;
+  const getClientPos = (e) => {
+      // Se for evento de toque (Touch)
+      if (e.touches && e.touches.length > 0) {
+        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+      // Se for evento de toque que acabou (ChangedTouches - raro no move, comum no end)
+      if (e.changedTouches && e.changedTouches.length > 0) {
+        return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+      }
+      // Se for Mouse padrão
+      return { x: e.clientX, y: e.clientY };
+    };
   useEffect(() => {
     onTokenMoveRef.current = onTokenMove;
   }, [onTokenMove]);
@@ -28,7 +40,8 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
           id: obj.id,
           imageId: obj.imageId,
           gridX: obj.savedGridX || 0,
-          gridY: obj.savedGridY || 0
+          gridY: obj.savedGridY || 0,
+          isTemporary: obj.isTemporary || false // Flag para identificar tokens temporários
         }));
     },
     
@@ -71,12 +84,12 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
       }
     },
     
-    createToken: (fileOrDataUrl, gridX, gridY, ID, imageId = null) => {
-      createTokenAt(fileOrDataUrl, gridX, gridY, ID, imageId);
+    createToken: (fileOrDataUrl, gridX, gridY, ID, imageId = null, isTemporary = false) => {
+      createTokenAt(fileOrDataUrl, gridX, gridY, ID, imageId, isTemporary);
     }
   }));
 
-  const createTokenAt = async (fileOrDataUrl, gridX, gridY, ID, imageId = null) => {
+  const createTokenAt = async (fileOrDataUrl, gridX, gridY, ID, imageId = null, isTemporary = false) => {
     const canvas = canvasInstance.current;
     if (!canvas) return;
 
@@ -93,22 +106,25 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
         left: pixelX,
         top: pixelY,
         id: ID,
-        imageId: imageId, // IMPORTANTE: Armazena o image_id
-        savedGridX: gridX, // Salva posição inicial
-        savedGridY: gridY, // Salva posição inicial
+        imageId: imageId,
+        savedGridX: gridX,
+        savedGridY: gridY,
+        isTemporary: isTemporary, // NOVO: marca se é temporário
         scaleX: scale,
         scaleY: scale,
         originX: 'center',
         originY: 'center',
         cornerStyle: 'circle',
-        cornerColor: '#00ff88',
-        borderColor: '#33ff99',
+        cornerColor: isTemporary ? '#ffaa00' : '#00ff88', // Cor diferente para temporários
+        borderColor: isTemporary ? '#ffcc44' : '#33ff99',
         transparentCorners: false,
       });
 
       canvas.add(fabricImg);
       canvas.renderAll();
-      console.log(`Token criado: ${ID} em (${gridX}, ${gridY}) com imageId: ${imageId}`);
+      
+      const status = isTemporary ? '⚠️ TEMPORÁRIO' : '✅ PERSISTENTE';
+      console.log(`${status} Token criado: ${ID} em (${gridX}, ${gridY}) com imageId: ${imageId}`);
     } catch (err) {
       console.error('Erro ao criar token:', err);
     }
@@ -130,12 +146,12 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
       if (!response.ok) throw new Error('Upload failed');
 
       const data = await response.json();
-      const serverUrl = data.url; // URL permanente do servidor
+      const serverUrl = data.url;
       
       if (onTokenCreated) {
         onTokenCreated({
-          id: data.token_id,     // ID único do token na mesa
-          imageId: data.image_id, // ID da imagem no banco (para os outros baixarem)
+          id: data.token_id,
+          imageId: data.image_id,
           x: 1,
           y: 1
         });
@@ -154,8 +170,8 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
         canvas.backgroundImage = fabricImg;
         canvas.renderAll();
       } else {
-        // Token normal - agora passa o imageId também
-        await createTokenAt(serverUrl, 1, 1, 'token-' + Date.now(), data.image_id);
+        // Token criado por drag&drop - TEMPORÁRIO até salvar cena
+        await createTokenAt(serverUrl, 1, 1, 'temp-token-' + Date.now(), data.image_id, true);
       }
     } catch (err) {
       console.error('Erro no upload ou criação do token:', err);
@@ -179,7 +195,6 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
         height: window.innerHeight - 120,
       });
 
-      // Clear old grid lines
       canvas.getObjects().forEach((obj) => {
         if (obj.isGridLine) canvas.remove(obj);
       });
@@ -240,17 +255,19 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
 
       // Check if coordinates actually changed
       if (obj.savedGridX !== gridX || obj.savedGridY !== gridY) {
-        console.log(`🔄 Token [${obj.id}] CHANGED to: [${gridX}, ${gridY}]`);
+        console.log(`📍 Token [${obj.id}] CHANGED to: [${gridX}, ${gridY}]`);
         
-        // Update the stored coordinates
         obj.savedGridX = gridX;
         obj.savedGridY = gridY;
 
-        if (onTokenMoveRef.current) {
+        // Só propaga movimento se NÃO for temporário
+        if (!obj.isTemporary && onTokenMoveRef.current) {
           onTokenMoveRef.current({ id: obj.id, x: gridX, y: gridY });
+        } else if (obj.isTemporary) {
+          console.log('⚠️ Token temporário movido - não propagado');
         }
       } else {
-        console.log(`🔄 Token [${obj.id}] snapped back to same cell. Ignoring.`);
+        console.log(`📍 Token [${obj.id}] snapped back to same cell. Ignoring.`);
       }
     });
 
@@ -267,26 +284,58 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
     // Pan
     let panning = false;
     let lastX, lastY;
-    canvas.on('mouse:down', (opt) => {
-      if (opt.e.altKey || opt.e.button === 1) {
-        panning = true;
-        lastX = opt.e.clientX;
-        lastY = opt.e.clientY;
-        canvas.defaultCursor = 'grab';
-      }
-    });
-    canvas.on('mouse:move', (opt) => {
-      if (panning) {
-        const delta = new Point(opt.e.clientX - lastX, opt.e.clientY - lastY);
-        lastX = opt.e.clientX;
-        lastY = opt.e.clientY;
-        canvas.relativePan(delta);
+canvas.on('mouse:down', (opt) => {
+      const evt = opt.e;
+      
+      // Detecção de clique/toque
+      const isMiddleClick = evt.button === 1; // Botão do meio
+      const isLeftClickEmpty = evt.button === 0 && !opt.target; // Botão esquerdo no vazio
+      // Verifica se existe touches antes de ler length para evitar erro no Desktop
+      const isTouchPan = evt.touches && evt.touches.length === 1 && !opt.target; 
+
+      if (evt.altKey || isMiddleClick || isLeftClickEmpty || isTouchPan) {
+        isDragging = true;
+        canvas.selection = false; 
+        
+        const pos = getClientPos(evt);
+        lastX = pos.x;
+        lastY = pos.y;
+        
         canvas.defaultCursor = 'grabbing';
       }
     });
-    canvas.on('mouse:up', () => {
-      panning = false;
-      canvas.defaultCursor = 'default';
+canvas.on('mouse:move', (opt) => {
+      if (isDragging) {
+        const evt = opt.e;
+        const pos = getClientPos(evt); 
+
+        // Proteção contra NaN ou undefined
+        if (!pos.x || !pos.y) return;
+
+        // O cálculo de delta que você queria manter
+        const delta = new Point(pos.x - lastX, pos.y - lastY);
+        
+        canvas.relativePan(delta);
+        
+        lastX = pos.x;
+        lastY = pos.y;
+        
+        // Evita scroll da tela no celular
+        if(evt.preventDefault) evt.preventDefault();
+        if(evt.stopPropagation) evt.stopPropagation();
+      }
+    });
+canvas.on('mouse:up', () => {
+      // Reseta tudo
+      if (isDragging) {
+        isDragging = false;
+        canvas.selection = true;
+        canvas.defaultCursor = 'default';
+        
+        // Recalcula coordenadas para garantir que o clique no token funcione depois
+        canvas.getObjects().forEach(obj => obj.setCoords());
+        canvas.requestRenderAll();
+      }
     });
 
     const el = canvasRef.current;
@@ -319,22 +368,31 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
 
   return (
     <div style={{ padding: 20, background: '#111', height: '100vh', color: 'white', fontFamily: 'Arial' }}>
-      <div style={{ marginBottom: 15, display: 'flex', gap: 15, alignItems: 'center', flexWrap: 'wrap' }}>
-        <strong>Zoom: {(zoom * 100).toFixed(0)}%</strong>
-        <button
-          onClick={() => backgroundInputRef.current?.click()}
-          style={{ padding: '10px 20px', background: '#222', border: '2px solid #00ff88', color: '#00ff88', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' }}
-        >
-          Add Background
-        </button>
-        <button
-          onClick={() => tokenInputRef.current?.click()}
-          style={{ padding: '10px 20px', background: '#222', border: '2px solid #00ff88', color: '#00ff88', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold' }}
-        >
-          + Add Token
-        </button>
-      </div>
+<div className="vtt-toolbar">
+  <div className="vtt-logo">Virtual Tabletop</div>
+  
+  <button className="toolbar-btn" onClick={() => backgroundInputRef.current?.click()}>
+     Background
+  </button>
+  
+  <button className="toolbar-btn" onClick={() => tokenInputRef.current?.click()}>
+     Token
+  </button>
+  
+  <div className="toolbar-spacer"></div>
+  
+  <div className="zoom-indicator">
+    Zoom: {(zoom * 100).toFixed(0)}%
+  </div>
+  
+  <button className="toolbar-btn">
+    👥 3 Online
+  </button>
+</div>
 
+<div className="canvas-area">
+  <canvas ref={canvasRef} />
+</div>
       <input
         type="file"
         accept="image/*"
@@ -356,7 +414,7 @@ function RPGGrid({ onTokenMove, onTokenCreated, ref }) {
         }}
       />
 
-      <canvas ref={canvasRef} style={{ border: '2px solid #333', display: 'block' }} />
+  
     </div>
   );
 }

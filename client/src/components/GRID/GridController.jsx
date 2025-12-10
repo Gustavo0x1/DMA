@@ -2,8 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import RPGGrid from './RPGGrid';
 import SceneManager from './SceneManager';
 import io from 'socket.io-client'
+import TokenManager from './TokenManager';
 
-const API_URL = "https://navigation-calvin-serves-guardian.trycloudflare.com";
+const API_URL = process.env.REACT_APP_API_URL;
 const socket = io.connect(API_URL)
 
 function GridController() {
@@ -62,54 +63,10 @@ function GridController() {
     }, []);
 
     return (
-        <div>
-            {/* NOVO: Scene Manager com socket */}
-            <SceneManager gridRef={gridRef} socket={socket} />
+   <div className="vtt-container">
 
-            {/* Controles de Debug (opcional - pode remover) */}
-            <div style={{ 
-                position: 'fixed', 
-                top: 10, 
-                right: 10, 
-                zIndex: 1000, 
-                background: 'rgba(255,255,255,0.9)', 
-                padding: 10,
-                borderRadius: 8,
-                border: '2px solid #333'
-            }}>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: 14 }}>Debug Controls</h3>
-                <button 
-                    onClick={spawnGoblin}
-                    style={{
-                        display: 'block',
-                        width: '100%',
-                        marginBottom: 5,
-                        padding: 8,
-                        background: '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: 4,
-                        cursor: 'pointer'
-                    }}
-                >
-                    Spawn Goblin (ID 4)
-                </button>
-                <button 
-                    onClick={() => forceMoveGoblin(4, 5, 5)}
-                    style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: 8,
-                        background: '#2196F3',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: 4,
-                        cursor: 'pointer'
-                    }}
-                >
-                    Move Goblin to (5,5)
-                </button>
-            </div>
+<SceneManager gridRef={gridRef} socket={socket} />
+<TokenManager gridRef={gridRef} socket={socket} />
 
             {/* RPG Grid */}
             <RPGGrid
