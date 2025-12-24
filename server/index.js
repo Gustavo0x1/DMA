@@ -201,6 +201,19 @@ app.delete('/api/tokens/:token_id', (req, res) => {
         res.json({ deleted: token_id });
     });
 });
+app.delete('/api/images/:id', (req, res) => {
+    const { id } = req.params;
+    
+    const sql = `DELETE FROM images WHERE image_id = ?`;
+    
+    db.run(sql, [id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'Imagem não encontrada.' });
+        }
+        res.json({ deleted: id });
+    });
+});
 
 // --- API de Cenas ---
 

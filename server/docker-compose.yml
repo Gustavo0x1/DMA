@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+  dma-rpg:
+    build: .
+    container_name: dma-rpg
+    image: dma-rpg-image  # Dá um nome para a imagem criada
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      # IMPORTANTE: Caminho absoluto do CasaOS para a pasta que criamos
+      - /DATA/AppData/dma-rpg/dma_database.db:/app/dma_database.db

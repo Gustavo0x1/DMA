@@ -1,0 +1,23 @@
+# Usa uma imagem leve do Node.js
+FROM node:18-alpine
+
+# Cria o diretório de trabalho dentro do container
+WORKDIR /app
+
+# Instala dependências do sistema necessárias para compilar o sqlite3 (se necessário)
+RUN apk add --no-cache python3 make g++
+
+# Copia apenas o package.json primeiro (para aproveitar o cache do Docker)
+COPY package.json ./
+
+# Instala as dependências do Node
+RUN npm install
+
+# Copia o restante do código fonte
+COPY . .
+
+# Expõe a porta que você definiu no index.js
+EXPOSE 3001
+
+# Comando para iniciar
+CMD ["npm", "start"]

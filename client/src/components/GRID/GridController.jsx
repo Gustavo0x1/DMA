@@ -3,7 +3,6 @@ import RPGGrid from './RPGGrid';
 import SceneManager from './SceneManager';
 import io from 'socket.io-client'
 import TokenManager from './TokenManager';
-
 const API_URL = process.env.REACT_APP_API_URL;
 const socket = io.connect(API_URL)
 
